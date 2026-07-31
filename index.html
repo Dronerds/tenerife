@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.svg" />
+    <title>Tenerife</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #0b0e13;
+      }
+      canvas {
+        display: block;
+      }
+      #hud {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        padding: 8px 10px;
+        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: #cfe3ff;
+        background: rgba(6, 10, 16, 0.72);
+        border: 1px solid rgba(120, 160, 210, 0.25);
+        border-radius: 4px;
+        white-space: pre;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hud">booting…</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
