@@ -45,9 +45,9 @@ const FOV = CesiumMath.toRadians(104.5)
  * Only the starting position — the camera is the user's from the first frame.
  */
 const START = {
-  lon: -16.56838,
-  lat: 28.40886,
-  height: 83,
+  lon: -16.56831,
+  lat: 28.40894,
+  height: 91,
   heading: 117,
   pitch: -15,
 }
