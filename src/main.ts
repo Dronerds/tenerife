@@ -178,9 +178,17 @@ async function main(): Promise<void> {
     last = now
     fps += (1000 / frameMs - fps) * 0.08
 
+    const position = Cartographic.fromCartesian(camera.positionWC)
+    const lon = CesiumMath.toDegrees(position.longitude)
+    const lat = CesiumMath.toDegrees(position.latitude)
     const lines = [
       `${fps.toFixed(0)} fps`,
-      `altitude  ${Cartographic.fromCartesian(camera.positionWC).height.toFixed(0)} m`,
+      // Five decimals is a bit over a metre at this latitude — enough to point
+      // someone at the same spot, without pretending to sub-metre accuracy.
+      `lon/lat   ${lon.toFixed(5)}, ${lat.toFixed(5)}`,
+      `altitude  ${position.height.toFixed(0)} m`,
+      `heading   ${CesiumMath.toDegrees(camera.heading).toFixed(0)}°   ` +
+        `pitch ${CesiumMath.toDegrees(camera.pitch).toFixed(0)}°`,
     ]
     lines.push(
       `layer     ${photorealOn ? 'google photoreal' : 'terrain + osm buildings'}`,
