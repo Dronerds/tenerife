@@ -6,6 +6,7 @@
  *   space         pause the flight
  *   [ / ]         slower / faster
  *   , / .         previous / next waypoint
+ *   B             toggle buildings
  *   drag/scroll   orbit and zoom, in free mode
  */
 
@@ -14,6 +15,7 @@ import {
   Math as CesiumMath,
   type PerspectiveFrustum,
   Viewer,
+  createOsmBuildingsAsync,
   createWorldTerrainAsync,
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
@@ -85,6 +87,13 @@ async function main(): Promise<void> {
       `ground sampled in ${((performance.now() - started) / 1000).toFixed(1)} s`,
   )
 
+  // Replaces the three.js version's OSM layer wholesale: 636 lines of extrusion
+  // plus a 48 MB osm.json built by a Python script, for one line and no local
+  // data. Same source data, same abstraction — untextured prisms from OSM
+  // footprints — so the two are directly comparable.
+  const buildings = await createOsmBuildingsAsync()
+  viewer.scene.primitives.add(buildings)
+
   const flight = new DroneFlight(route, profile)
   let fpv = true
   // Cesium's screen-space controller is the free-orbit camera; it has to be off
@@ -103,6 +112,8 @@ async function main(): Promise<void> {
       flight.speed = Math.max(5, flight.speed - 10)
     } else if (key === ']') {
       flight.speed = Math.min(300, flight.speed + 10)
+    } else if (key === 'b') {
+      buildings.show = !buildings.show
     } else if (key === ',' || key === '.') {
       const points = flight.route.points
       let index = points.findIndex((p) => p.distance > flight.distanceTravelled)
@@ -135,11 +146,11 @@ async function main(): Promise<void> {
         `route     ${(state.progress * 100).toFixed(1)}%   ${state.speed.toFixed(0)} m/s`,
       )
     }
-    lines.push('V fpv  space  [ ] speed  , . wp')
+    lines.push('V fpv  space  [ ] speed  , . wp  B built')
     hud.textContent = lines.join('\n')
   })
 
-  Object.assign(window, { tenerife: { viewer, route, profile, flight } })
+  Object.assign(window, { tenerife: { viewer, route, profile, flight, buildings } })
 }
 
 main().catch((error: unknown) => {
