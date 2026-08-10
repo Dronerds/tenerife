@@ -7,14 +7,17 @@
  *   [ / ]         slower / faster
  *   , / .         previous / next waypoint
  *   B             toggle buildings
+ *   P             toggle Google photorealistic 3D Tiles  (metered — see README)
  *   drag/scroll   orbit and zoom, in free mode
  */
 
 import {
+  type Cesium3DTileset,
   Ion,
   Math as CesiumMath,
   type PerspectiveFrustum,
   Viewer,
+  createGooglePhotorealistic3DTileset,
   createOsmBuildingsAsync,
   createWorldTerrainAsync,
 } from 'cesium'
@@ -94,6 +97,35 @@ async function main(): Promise<void> {
   const buildings = await createOsmBuildingsAsync()
   viewer.scene.primitives.add(buildings)
 
+  // Google Photorealistic 3D Tiles: textured photogrammetry instead of extruded
+  // prisms and a shaded DEM. This is the layer that actually changes what the
+  // route looks like, and the reason for the branch.
+  //
+  // Created lazily on the first P press, and never otherwise, because unlike
+  // everything else here it is metered — Google bills per tile request, via the
+  // ion quota. A session that never presses P costs nothing.
+  let photoreal: Cesium3DTileset | null = null
+  let photorealOn = false
+
+  async function togglePhotoreal(): Promise<void> {
+    if (!photoreal) {
+      hud.textContent = 'loading photorealistic tiles…'
+      // Google licence: these tiles may only be used with the Google geocoder.
+      // This app has no geocoder at all (the Viewer disables it), so the
+      // restriction holds trivially, and this flag asserts we know about it.
+      photoreal = await createGooglePhotorealistic3DTileset({
+        onlyUsingWithGoogleGeocoder: true,
+      })
+      viewer.scene.primitives.add(photoreal)
+    }
+    photorealOn = !photorealOn
+    photoreal.show = photorealOn
+    // The photogrammetry already contains the ground and the buildings, so
+    // showing it over them would z-fight against two surfaces of its own.
+    viewer.scene.globe.show = !photorealOn
+    buildings.show = !photorealOn
+  }
+
   const flight = new DroneFlight(route, profile)
   let fpv = true
   // Cesium's screen-space controller is the free-orbit camera; it has to be off
@@ -114,6 +146,8 @@ async function main(): Promise<void> {
       flight.speed = Math.min(300, flight.speed + 10)
     } else if (key === 'b') {
       buildings.show = !buildings.show
+    } else if (key === 'p') {
+      void togglePhotoreal()
     } else if (key === ',' || key === '.') {
       const points = flight.route.points
       let index = points.findIndex((p) => p.distance > flight.distanceTravelled)
@@ -146,11 +180,14 @@ async function main(): Promise<void> {
         `route     ${(state.progress * 100).toFixed(1)}%   ${state.speed.toFixed(0)} m/s`,
       )
     }
-    lines.push('V fpv  space  [ ] speed  , . wp  B built')
+    lines.push(`layer     ${photorealOn ? 'google photoreal' : 'terrain + osm buildings'}`)
+    lines.push('V fpv  space  [ ] speed  , . wp  B built  P photoreal')
     hud.textContent = lines.join('\n')
   })
 
-  Object.assign(window, { tenerife: { viewer, route, profile, flight, buildings } })
+  Object.assign(window, {
+    tenerife: { viewer, route, profile, flight, buildings, togglePhotoreal },
+  })
 }
 
 main().catch((error: unknown) => {
