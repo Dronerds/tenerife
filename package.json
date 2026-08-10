@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Low-altitude terrain proof of concept over the island of Tenerife",
+  "description": "The Tenerife demo flight rebuilt on CesiumJS — comparison branch, not for merge",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
