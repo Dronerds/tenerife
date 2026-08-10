@@ -70,9 +70,8 @@ appears in the credit container, which is why that container is not disabled.
 
 ## The view
 
-Opens just off Punta Brava, ~250 m out over the water and 130 m up, looking
-south — inland along the coast at Puerto de la Cruz with Teide behind. From
-there the camera is yours: it is Cesium's own screen-space controller, so
+Opens over Punta Brava at 83 m, heading 117° — east-southeast, low along the
+seafront terraces. From there the camera is yours: it is Cesium's own screen-space controller, so
 left-drag pans, scroll or right-drag zooms, and ctrl-drag (or middle-drag)
 rotates and tilts.
 

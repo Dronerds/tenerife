@@ -40,17 +40,15 @@ const hud = document.getElementById('hud') as HTMLDivElement
 const FOV = CesiumMath.toRadians(104.5)
 
 /**
- * Opening view: Punta Brava from just off the point, ~250 m out over the water.
+ * Opening view, over Punta Brava looking east-southeast down the coast.
  *
- * Heading due south so the shot looks inland along the coast, pitched down a
- * little to put the shoreline mid-frame. Only the starting position — the
- * camera is the user's from the first frame.
+ * Only the starting position — the camera is the user's from the first frame.
  */
 const START = {
-  lon: -16.5678,
-  lat: 28.4206,
-  height: 130,
-  heading: 180,
+  lon: -16.56838,
+  lat: 28.40886,
+  height: 83,
+  heading: 117,
   pitch: -15,
 }
 
