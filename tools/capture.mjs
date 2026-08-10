@@ -2,22 +2,28 @@
  * Headless capture for visual verification.
  *
  * Drives the dev server through real Chrome (real GPU, real WebGL2) and shoots
- * a fixed set of viewpoints, so terrain changes can be compared frame to frame
- * rather than by spinning the camera around by hand and hoping.
+ * a fixed set of viewpoints, so changes can be compared frame to frame rather
+ * than by spinning the camera around by hand and hoping.
  *
- * The low-AGL viewpoints are the ones that matter: this project exists to look
- * right at 15 m above the ground, and a bug that is invisible from 9 km up can
- * be glaring from 15 m.
+ * The viewpoints are the three.js version's, unchanged, so the two branches can
+ * be shot into separate directories and compared image against image:
+ *
+ *   (in tenerife/)         npm run dev &  npm run capture captures-three
+ *   (in tenerife-cesium/)  npm run dev &  npm run capture captures-cesium
  *
  *   npm run dev
  *   node tools/capture.mjs [outputDir]
+ *
+ * Set PHOTOREAL=1 to shoot the Google photorealistic tiles instead of terrain
+ * plus OSM buildings. That layer is metered — see the README.
  */
 
 import { mkdirSync } from 'node:fs'
 import puppeteer from 'puppeteer-core'
 
 const OUT = process.argv[2] ?? 'captures'
-const URL = process.env.CAPTURE_URL ?? 'http://localhost:5173/'
+const URL = process.env.CAPTURE_URL ?? 'http://localhost:5174/'
+const PHOTOREAL = process.env.PHOTOREAL === '1'
 const CHROME =
   process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 
@@ -61,13 +67,6 @@ const VIEWS = [
   },
 ]
 
-/** Debug shading modes captured for the whole-island view. */
-const DEBUG_VIEWS = [
-  { name: '07-quadtree-depth', key: '2' },
-  { name: '08-morph-factor', key: '3' },
-  { name: '09-biomes', key: '4' },
-]
-
 mkdirSync(OUT, { recursive: true })
 
 const browser = await puppeteer.launch({
@@ -92,46 +91,52 @@ page.on('console', (m) => {
   if (m.type() === 'error' && !m.text().includes('favicon')) errors.push(m.text())
 })
 
-await page.goto(URL, { waitUntil: 'networkidle0', timeout: 120000 })
-await page.waitForFunction(() => 'tenerife' in window, { timeout: 120000 })
+await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 180000 })
+// Not networkidle0: Cesium streams tiles continuously, so the network never
+// goes idle. Wait for the app's own handle instead.
+await page.waitForFunction(() => 'tenerife' in window, { timeout: 300000, polling: 500 })
 // These viewpoints are free-camera shots, so take the drone off the controls.
 await page.evaluate(() => window.tenerife.setFpv(false))
+if (PHOTOREAL) await page.evaluate(() => window.tenerife.togglePhotoreal())
 
-const settle = () => new Promise((r) => setTimeout(r, 900))
+/**
+ * Wait until the tiles stop streaming, then for one rendered frame.
+ *
+ * The three.js version could get away with a fixed 900 ms here because all its
+ * data was resident. Cesium streams, so the wait has to be a real predicate —
+ * and `tilesLoaded` flickers true between request batches, hence the streak
+ * rather than a single sample.
+ */
+async function settle() {
+  await page.evaluate(() => {
+    globalThis.__streak = 0
+  })
+  await page.waitForFunction(
+    () => {
+      globalThis.__streak = window.tenerife.settled() ? (globalThis.__streak ?? 0) + 1 : 0
+      return globalThis.__streak >= 5
+    },
+    { polling: 250, timeout: 300000 },
+  )
+  await page.evaluate(() => window.tenerife.nextFrame())
+}
+
 const hud = () => page.$eval('#hud', (el) => el.textContent)
-
 const report = []
 
 for (const view of VIEWS) {
-  await page.evaluate(
-    (from, at) => window.tenerife.lookFrom(from, at),
-    view.from,
-    view.at,
-  )
+  await page.evaluate((from, at) => window.tenerife.lookFrom(from, at), view.from, view.at)
   await settle()
   await page.screenshot({ path: `${OUT}/${view.name}.png` })
   const text = await hud()
-  const nodes = /nodes\s+(\d+)/.exec(text)?.[1]
-  const tris = /triangles\s+([\d.]+)/.exec(text)?.[1]
-  const fps = /^(\d+) fps/.exec(text)?.[1]
-  const agl = /agl\s+(-?\d+)/.exec(text)?.[1]
-  const saturated = text.includes('SATURATED')
-  report.push({ name: view.name, note: view.note, fps, nodes, tris, agl, saturated })
+  report.push({
+    name: view.name,
+    note: view.note,
+    fps: /^(\d+) fps/.exec(text)?.[1],
+    layer: /layer\s+(.+)/.exec(text)?.[1],
+    tiles: /tiles\s+(\w+)/.exec(text)?.[1],
+  })
 }
-
-// Debug modes, from the whole-island viewpoint.
-await page.evaluate(
-  (from, at) => window.tenerife.lookFrom(from, at),
-  VIEWS[0].from,
-  VIEWS[0].at,
-)
-for (const dv of DEBUG_VIEWS) {
-  await page.keyboard.press(dv.key)
-  await settle()
-  await page.screenshot({ path: `${OUT}/${dv.name}.png` })
-}
-await page.keyboard.press('1')
-
 
 console.table(report)
 if (errors.length) {
