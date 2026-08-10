@@ -17,6 +17,7 @@ import {
   type Cesium3DTileset,
   Ellipsoid,
   Ion,
+  JulianDate,
   Math as CesiumMath,
   type PerspectiveFrustum,
   Viewer,
@@ -71,6 +72,14 @@ async function main(): Promise<void> {
     selectionIndicator: false,
   })
   viewer.scene.globe.enableLighting = true
+  // Freeze the sun. `enableLighting` shades from the real sun position at the
+  // scene clock, which defaults to now — so the island is lit differently on
+  // every run, and at night it is simply black. That makes capture-to-capture
+  // comparison meaningless, which is the one thing this branch exists for.
+  // Late morning in high summer, when Teide's north face is lit rather than in
+  // its own shadow. The three.js version's fixed sun vector is the equivalent.
+  viewer.clock.currentTime = JulianDate.fromIso8601('2024-06-21T11:00:00Z')
+  viewer.clock.shouldAnimate = false
 
   const camera = viewer.camera
   // The 3D scene's frustum is always a PerspectiveFrustum; the union in the
