@@ -65,21 +65,22 @@ appears in the credit container, which is why that container is not disabled.
 
 | key | |
 | --- | --- |
-| `V` | orbit / free camera |
-| `space` | pause the orbit |
-| `[` `]` | slower / faster |
 | `B` | toggle buildings |
 | `P` | photorealistic tiles / terrain + OSM buildings |
 
 ## The view
 
-A slow orbit around Punta Brava. The camera starts due north of it, out over the
-water, so the opening shot looks south — inland along the coast at Puerto de la
-Cruz with Teide behind — and then circles at 2°/s, 900 m out and 320 m up.
+Opens just off Punta Brava, ~250 m out over the water and 130 m up, looking
+south — inland along the coast at Puerto de la Cruz with Teide behind. From
+there the camera is yours: it is Cesium's own screen-space controller, so
+left-drag pans, scroll or right-drag zooms, and ctrl-drag (or middle-drag)
+rotates and tilts.
 
-The 26-waypoint route flight the three.js version flies is not carried over
-here; `space` pauses the orbit, `[` and `]` change its speed, and `V` hands the
-camera to Cesium's own controls.
+Nothing moves the camera on its own. The 26-waypoint route flight the three.js
+version flies is not carried over here.
+
+Camera collision detection is off, so you can zoom all the way down to street
+level — and, equally, straight through the ground.
 
 ## What Cesium gave, and what it took
 
@@ -98,15 +99,14 @@ around. So does the *mar de nubes*: Cesium has no stratus-deck primitive, and
 
 **A wash.** Cesium World Terrain is ~30 m, the same as FABDEM, so swapping
 terrain providers changes very little on its own. What changes the image is the
-photorealistic tiles. At the orbit's ~320 m that is a fair trade; it would be a
-worse one down at the 15 m this project originally targeted, where
-photogrammetry looks melted.
+photorealistic tiles. That holds up while you stay a few hundred metres up; zoom
+right down to the 15 m this project originally targeted and the photogrammetry
+looks melted.
 
 ## Layout
 
 ```
 src/geo/          local ENU frame over the island
-src/camera/       the orbit camera
 tools/            Cesium asset staging, headless capture
 test/             frame contract tests
 ```

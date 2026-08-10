@@ -1,13 +1,13 @@
 /**
- * Entry point. Orbits Punta Brava, looking inland along the coast.
+ * Entry point. Opens over Punta Brava looking inland along the coast, then
+ * hands the camera to the user.
+ *
+ * Movement is Cesium's own screen-space controller: left-drag pans, right-drag
+ * or scroll zooms, middle-drag (or ctrl-drag) rotates and tilts.
  *
  * Controls
- *   V             toggle orbit / free camera
- *   space         pause the orbit
- *   [ / ]         slower / faster
  *   B             toggle buildings
  *   P             photorealistic tiles / terrain + OSM buildings
- *   drag/scroll   pan and zoom, in free mode
  */
 
 import {
@@ -26,7 +26,6 @@ import {
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
-import { OrbitCamera } from './camera/orbit.ts'
 
 const hud = document.getElementById('hud') as HTMLDivElement
 
@@ -41,18 +40,18 @@ const hud = document.getElementById('hud') as HTMLDivElement
 const FOV = CesiumMath.toRadians(104.5)
 
 /**
- * Punta Brava, the old route's first waypoint.
+ * Opening view: Punta Brava from just off the point, ~250 m out over the water.
  *
- * The camera starts due north of it — out over the water — so the opening view
- * looks south, inland, back along the coast. It then circles.
+ * Heading due south so the shot looks inland along the coast, pitched down a
+ * little to put the shoreline mid-frame. Only the starting position — the
+ * camera is the user's from the first frame.
  */
-const ORBIT = {
+const START = {
   lon: -16.5678,
-  lat: 28.4183,
-  targetHeight: 40,
-  radius: 900,
-  height: 320,
-  startBearing: 0,
+  lat: 28.4206,
+  height: 130,
+  heading: 180,
+  pitch: -15,
 }
 
 async function main(): Promise<void> {
@@ -145,25 +144,25 @@ async function main(): Promise<void> {
 
   setPhotoreal(true)
 
-  const orbit = new OrbitCamera(ORBIT)
-  let orbiting = true
-  // Cesium's screen-space controller is the free-orbit camera; it has to be off
-  // while the flight owns the camera or the two fight over it every frame.
-  viewer.scene.screenSpaceCameraController.enableInputs = false
+  // Collision detection off. Two reasons: it stops you zooming down to street
+  // level, which is the point of having photogrammetry; and with the globe
+  // hidden under the photorealistic tiles it pushes the camera upward on its
+  // own — measured at 170 m of unrequested climb in the first seconds, against
+  // 0 with it off or with the globe showing.
+  viewer.scene.screenSpaceCameraController.enableCollisionDetection = false
+
+  camera.setView({
+    destination: Cartesian3.fromDegrees(START.lon, START.lat, START.height),
+    orientation: {
+      heading: CesiumMath.toRadians(START.heading),
+      pitch: CesiumMath.toRadians(START.pitch),
+      roll: 0,
+    },
+  })
 
   window.addEventListener('keydown', (event) => {
     const key = event.key.toLowerCase()
-    if (key === 'v') {
-      orbiting = !orbiting
-      viewer.scene.screenSpaceCameraController.enableInputs = !orbiting
-    } else if (event.key === ' ') {
-      orbit.paused = !orbit.paused
-      event.preventDefault()
-    } else if (key === '[') {
-      orbit.speed = Math.max(0.25, orbit.speed - 0.5)
-    } else if (key === ']') {
-      orbit.speed = Math.min(20, orbit.speed + 0.5)
-    } else if (key === 'b') {
+    if (key === 'b') {
       buildings.show = !buildings.show
     } else if (key === 'p') {
       togglePhotoreal()
@@ -178,25 +177,15 @@ async function main(): Promise<void> {
     const frameMs = Math.max(now - last, 0.001)
     last = now
     fps += (1000 / frameMs - fps) * 0.08
-    // Clamp dt: a background tab or a shader compile stall produces a huge
-    // delta, which would teleport the drone hundreds of metres down the route.
-    const dt = Math.min(frameMs / 1000, 0.1)
-
-    const state = orbiting ? orbit.update(dt, camera) : null
 
     const lines = [
-      `${fps.toFixed(0)} fps    ${orbiting ? 'orbit' : 'free'}${state?.paused ? '  [PAUSED]' : ''}`,
+      `${fps.toFixed(0)} fps`,
+      `altitude  ${Cartographic.fromCartesian(camera.positionWC).height.toFixed(0)} m`,
     ]
-    if (state) {
-      lines.push(
-        `bearing   ${state.bearing.toFixed(0)}°   ${orbit.speed.toFixed(2)}°/s`,
-        `altitude  ${orbit.altitude.toFixed(0)} m`,
-      )
-    }
     lines.push(
       `layer     ${photorealOn ? 'google photoreal' : 'terrain + osm buildings'}`,
       `tiles     ${settled() ? 'loaded' : 'streaming'}`,
-      'V free  space  [ ] speed  B built  P photoreal',
+      'drag pan   scroll zoom   ctrl-drag rotate/tilt   B built  P photoreal',
     )
     hud.textContent = lines.join('\n')
   })
@@ -211,15 +200,10 @@ async function main(): Promise<void> {
   Object.assign(window, {
     tenerife: {
       viewer,
-      orbit,
       buildings,
       togglePhotoreal,
       setPhotoreal,
       settled,
-      setFpv(on: boolean) {
-        orbiting = on
-        viewer.scene.screenSpaceCameraController.enableInputs = !on
-      },
       /**
        * Place the free camera at a geographic position, `agl` metres up.
        *
@@ -230,8 +214,6 @@ async function main(): Promise<void> {
         from: { lon: number; lat: number; agl: number },
         at: { lon: number; lat: number; agl?: number },
       ) {
-        orbiting = false
-        viewer.scene.screenSpaceCameraController.enableInputs = true
         const [a, b] = await sampleTerrainMostDetailed(terrainProvider, [
           Cartographic.fromDegrees(from.lon, from.lat),
           Cartographic.fromDegrees(at.lon, at.lat),
@@ -261,7 +243,14 @@ async function main(): Promise<void> {
           ),
           up,
         )
-        camera.setView({ destination: eye, orientation: { direction, up } })
+        // Collision detection off. Two reasons: it stops you zooming down to street
+  // level, which is the point of having photogrammetry; and with the globe
+  // hidden under the photorealistic tiles it pushes the camera upward on its
+  // own — measured at 170 m of unrequested climb in the first seconds, against
+  // 0 with it off or with the globe showing.
+  viewer.scene.screenSpaceCameraController.enableCollisionDetection = false
+
+  camera.setView({ destination: eye, orientation: { direction, up } })
       },
       /** Resolves after the next rendered frame, so a screenshot is not mid-update. */
       nextFrame(): Promise<void> {

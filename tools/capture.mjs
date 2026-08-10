@@ -96,8 +96,6 @@ await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 180000 })
 // Not networkidle0: Cesium streams tiles continuously, so the network never
 // goes idle. Wait for the app's own handle instead.
 await page.waitForFunction(() => 'tenerife' in window, { timeout: 300000, polling: 500 })
-// These viewpoints are free-camera shots, so take the drone off the controls.
-await page.evaluate(() => window.tenerife.setFpv(false))
 if (BASELINE) await page.evaluate(() => window.tenerife.setPhotoreal(false))
 
 /**
