@@ -12,7 +12,10 @@
  */
 
 import {
+  Cartesian3,
+  Cartographic,
   type Cesium3DTileset,
+  Ellipsoid,
   Ion,
   Math as CesiumMath,
   type PerspectiveFrustum,
@@ -20,6 +23,7 @@ import {
   createGooglePhotorealistic3DTileset,
   createOsmBuildingsAsync,
   createWorldTerrainAsync,
+  sampleTerrainMostDetailed,
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
@@ -180,13 +184,94 @@ async function main(): Promise<void> {
         `route     ${(state.progress * 100).toFixed(1)}%   ${state.speed.toFixed(0)} m/s`,
       )
     }
-    lines.push(`layer     ${photorealOn ? 'google photoreal' : 'terrain + osm buildings'}`)
-    lines.push('V fpv  space  [ ] speed  , . wp  B built  P photoreal')
+    lines.push(
+      `layer     ${photorealOn ? 'google photoreal' : 'terrain + osm buildings'}`,
+      `tiles     ${settled() ? 'loaded' : 'streaming'}`,
+      'V fpv  space  [ ] speed  , . wp  B built  P photoreal',
+    )
     hud.textContent = lines.join('\n')
   })
 
+  /** True when every visible tile source has finished streaming. */
+  function settled(): boolean {
+    if (photorealOn) return photoreal?.tilesLoaded === true
+    return viewer.scene.globe.tilesLoaded && (!buildings.show || buildings.tilesLoaded)
+  }
+
+  // Handle for automated verification (tools/capture.mjs) and devtools poking.
   Object.assign(window, {
-    tenerife: { viewer, route, profile, flight, buildings, togglePhotoreal },
+    tenerife: {
+      viewer,
+      route,
+      profile,
+      flight,
+      buildings,
+      togglePhotoreal,
+      settled,
+      setFpv(on: boolean) {
+        fpv = on
+        viewer.scene.screenSpaceCameraController.enableInputs = !on
+      },
+      /** Jump the flight to a fraction of the route, 0..1. */
+      seekTo(fraction: number) {
+        flight.seekTo(fraction)
+      },
+      seekToWaypoint(index: number) {
+        flight.seekToWaypoint(index)
+      },
+      /**
+       * Place the free camera at a geographic position, `agl` metres up.
+       *
+       * Ground comes from a one-shot terrain sample rather than the route
+       * profile, because these viewpoints are deliberately off the route.
+       */
+      async lookFrom(
+        from: { lon: number; lat: number; agl: number },
+        at: { lon: number; lat: number; agl?: number },
+      ) {
+        fpv = false
+        viewer.scene.screenSpaceCameraController.enableInputs = true
+        const [a, b] = await sampleTerrainMostDetailed(terrainProvider, [
+          Cartographic.fromDegrees(from.lon, from.lat),
+          Cartographic.fromDegrees(at.lon, at.lat),
+        ])
+        const eye = Cartesian3.fromRadians(a!.longitude, a!.latitude, a!.height + from.agl)
+        const target = Cartesian3.fromRadians(
+          b!.longitude,
+          b!.latitude,
+          b!.height + (at.agl ?? 0),
+        )
+        const direction = Cartesian3.normalize(
+          Cartesian3.subtract(target, eye, new Cartesian3()),
+          new Cartesian3(),
+        )
+        const up = Ellipsoid.WGS84.geodeticSurfaceNormal(eye, new Cartesian3())
+        // Orthogonalise: the geodetic normal is not perpendicular to a
+        // downward-looking view direction.
+        Cartesian3.normalize(
+          Cartesian3.subtract(
+            up,
+            Cartesian3.multiplyByScalar(
+              direction,
+              Cartesian3.dot(up, direction),
+              new Cartesian3(),
+            ),
+            up,
+          ),
+          up,
+        )
+        camera.setView({ destination: eye, orientation: { direction, up } })
+      },
+      /** Resolves after the next rendered frame, so a screenshot is not mid-update. */
+      nextFrame(): Promise<void> {
+        return new Promise((resolve) => {
+          const remove = viewer.scene.postRender.addEventListener(() => {
+            remove()
+            resolve()
+          })
+        })
+      },
+    },
   })
 }
 
