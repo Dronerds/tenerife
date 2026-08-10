@@ -11,8 +11,8 @@ completely different answer to where the world comes from.
 | Renderer | three.js, hand-built | CesiumJS |
 | Terrain | FABDEM 30 m, resident, CDLOD quadtree | Cesium World Terrain, streamed |
 | Surface detail | procedural noise displacement | none — what the tiles give |
-| Ground colour | biome materials + Sentinel-2 composite | ion imagery |
-| Buildings | OSM ways extruded locally, 48 MB osm.json | Cesium OSM Buildings |
+| Ground colour | biome materials + Sentinel-2 composite | Google photogrammetry |
+| Buildings | OSM ways extruded locally, 48 MB osm.json | Google photogrammetry (OSM Buildings on `P`) |
 | Vegetation | instanced billboards by altitude band | none |
 | Sky | hand-written dome, haze, *mar de nubes* | Cesium atmosphere |
 | Local data | ~90 MB, four Python prep scripts | none |
@@ -51,14 +51,15 @@ imagine that `.env` hides it.
 
 ### What costs money
 
-Free on the ion free tier: Cesium World Terrain, the default imagery, and Cesium
-OSM Buildings. Those are what the app loads at startup.
+**The app opens on Google Photorealistic 3D Tiles, which are metered.** Google
+bills per tile request through the ion quota, so simply running this costs
+something — there is no free-by-default mode. Press `P` to fall back to Cesium
+World Terrain plus Cesium OSM Buildings, which are free on the ion free tier and
+are also the like-for-like comparison against the three.js version.
 
-**Metered:** Google Photorealistic 3D Tiles, behind `P`. Google bills per tile
-request through the ion quota, so the tileset is created lazily on the first
-press and a session that never presses `P` costs nothing. Google licence these
-tiles for use only with the Google geocoder; this app has no geocoder at all, so
-the restriction holds trivially.
+Google licence these tiles for use only with the Google geocoder; this app has
+no geocoder at all, so the restriction holds trivially. Their attribution
+appears in the credit container, which is why that container is not disabled.
 
 ## Controls
 
@@ -69,7 +70,7 @@ the restriction holds trivially.
 | `[` `]` | slower / faster |
 | `,` `.` | previous / next waypoint |
 | `B` | toggle buildings |
-| `P` | Google photorealistic tiles (**metered**) |
+| `P` | photorealistic tiles / terrain + OSM buildings |
 
 ## The demo route
 
@@ -90,9 +91,10 @@ Terrain the route measures 67.9 km and Teide resolves to 3,728 m against a true
 ## What Cesium gave, and what it took
 
 **Gave.** Global streaming LOD, a real WGS84 ellipsoid with real sun and time,
-photogrammetry on a keypress, and the deletion of the entire local data
-pipeline. It also runs faster: 42–60 fps across the six capture viewpoints
-against 25–36 for the three.js version, on the same machine.
+textured photogrammetry as the default surface, and the deletion of the entire
+local data pipeline. It also runs faster: 47–61 fps across the six capture
+viewpoints on photorealistic tiles, against 25–36 for the three.js version on
+the same machine.
 
 **Took.** All of the procedural work. The noise-displaced surface and its
 CPU/GPU parity contract, the biome-aware ground materials, and the altitudinal
@@ -128,9 +130,13 @@ is resolved at startup — the 26 waypoints, then the spline at 25 m spacing, ab
 The clearance clamp is then a synchronous lookup. See
 [`src/drone/terrain-profile.ts`](src/drone/terrain-profile.ts).
 
-Note that this samples the *globe* terrain, not any 3D tileset laid over it. With
-the photorealistic tiles on, the visible surface can stand above the terrain the
-clearance was measured against.
+Note that this samples the *globe* terrain, not the photorealistic tileset drawn
+over it, so the visible surface can stand above the terrain the clearance was
+measured against. Measured along the whole route with `scene.clampToHeight`, the
+worst case is **24.4 m of clearance** above the photogrammetry, at the Pine
+forest climb — the same place the globe-terrain minimum falls. Nothing clips,
+but the margin is about 6 m tighter than the nominal 32 m, so lowering
+`MIN_CLEARANCE` would need re-measuring rather than reasoning.
 
 ## Layout
 
@@ -163,9 +169,10 @@ The comparison this branch exists for:
 (cd ../tenerife-cesium && npm run capture captures-cesium)
 ```
 
-Then open the same filename from each directory side by side. `PHOTOREAL=1
-npm run capture` shoots the Google tiles instead — metered, so do it
-deliberately.
+Then open the same filename from each directory side by side. Captures shoot
+the photorealistic tiles, since that is what the app opens on; `BASELINE=1
+npm run capture` shoots terrain plus OSM buildings instead, which is the fairer
+comparison against `main` and costs nothing.
 
 ## Not carried over
 
@@ -184,4 +191,4 @@ the four Python prep scripts with the `data` npm script that drove them.
 | Terrain | Cesium World Terrain via ion | ion terms |
 | Imagery | ion default imagery | ion terms |
 | Buildings | Cesium OSM Buildings (ion asset 96188) | ODbL |
-| Photorealistic tiles | Google Photorealistic 3D Tiles | Google terms, **metered** |
+| Photorealistic tiles (default) | Google Photorealistic 3D Tiles | Google terms, **metered** |

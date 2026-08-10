@@ -14,8 +14,9 @@
  *   npm run dev
  *   node tools/capture.mjs [outputDir]
  *
- * Set PHOTOREAL=1 to shoot the Google photorealistic tiles instead of terrain
- * plus OSM buildings. That layer is metered — see the README.
+ * Shoots the photorealistic tiles, since that is what the app opens on. Set
+ * BASELINE=1 to shoot terrain plus OSM buildings instead — the free stack, and
+ * the like-for-like comparison against the three.js version.
  */
 
 import { mkdirSync } from 'node:fs'
@@ -23,7 +24,7 @@ import puppeteer from 'puppeteer-core'
 
 const OUT = process.argv[2] ?? 'captures'
 const URL = process.env.CAPTURE_URL ?? 'http://localhost:5174/'
-const PHOTOREAL = process.env.PHOTOREAL === '1'
+const BASELINE = process.env.BASELINE === '1'
 const CHROME =
   process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 
@@ -97,7 +98,7 @@ await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 180000 })
 await page.waitForFunction(() => 'tenerife' in window, { timeout: 300000, polling: 500 })
 // These viewpoints are free-camera shots, so take the drone off the controls.
 await page.evaluate(() => window.tenerife.setFpv(false))
-if (PHOTOREAL) await page.evaluate(() => window.tenerife.togglePhotoreal())
+if (BASELINE) await page.evaluate(() => window.tenerife.setPhotoreal(false))
 
 /**
  * Wait until the tiles stop streaming, then for one rendered frame.

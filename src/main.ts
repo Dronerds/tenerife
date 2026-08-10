@@ -7,14 +7,13 @@
  *   [ / ]         slower / faster
  *   , / .         previous / next waypoint
  *   B             toggle buildings
- *   P             toggle Google photorealistic 3D Tiles  (metered — see README)
+ *   P             photorealistic tiles / terrain + OSM buildings
  *   drag/scroll   orbit and zoom, in free mode
  */
 
 import {
   Cartesian3,
   Cartographic,
-  type Cesium3DTileset,
   Ellipsoid,
   Ion,
   JulianDate,
@@ -106,38 +105,45 @@ async function main(): Promise<void> {
   // Replaces the three.js version's OSM layer wholesale: 636 lines of extrusion
   // plus a 48 MB osm.json built by a Python script, for one line and no local
   // data. Same source data, same abstraction — untextured prisms from OSM
-  // footprints — so the two are directly comparable.
+  // footprints — so the two are directly comparable. Hidden by default, since
+  // the photogrammetry below already contains buildings.
   const buildings = await createOsmBuildingsAsync()
   viewer.scene.primitives.add(buildings)
 
   // Google Photorealistic 3D Tiles: textured photogrammetry instead of extruded
-  // prisms and a shaded DEM. This is the layer that actually changes what the
-  // route looks like, and the reason for the branch.
+  // prisms over a shaded DEM. This is the layer that actually changes what the
+  // route looks like, so it is what the app opens on.
   //
-  // Created lazily on the first P press, and never otherwise, because unlike
-  // everything else here it is metered — Google bills per tile request, via the
-  // ion quota. A session that never presses P costs nothing.
-  let photoreal: Cesium3DTileset | null = null
-  let photorealOn = false
+  // It is also the only metered thing here — Google bills per tile request
+  // through the ion quota — so unlike everything else, simply running the app
+  // now costs something. P falls back to the free stack (Cesium World Terrain
+  // plus OSM buildings), which is also the like-for-like comparison against the
+  // three.js version.
+  hud.textContent = 'loading photorealistic tiles…'
+  // Google licence: these tiles may only be used with the Google geocoder. This
+  // app has no geocoder at all (the Viewer disables it), so the restriction
+  // holds trivially, and this flag asserts we know about it.
+  const photoreal = await createGooglePhotorealistic3DTileset({
+    onlyUsingWithGoogleGeocoder: true,
+  })
+  viewer.scene.primitives.add(photoreal)
 
-  async function togglePhotoreal(): Promise<void> {
-    if (!photoreal) {
-      hud.textContent = 'loading photorealistic tiles…'
-      // Google licence: these tiles may only be used with the Google geocoder.
-      // This app has no geocoder at all (the Viewer disables it), so the
-      // restriction holds trivially, and this flag asserts we know about it.
-      photoreal = await createGooglePhotorealistic3DTileset({
-        onlyUsingWithGoogleGeocoder: true,
-      })
-      viewer.scene.primitives.add(photoreal)
-    }
-    photorealOn = !photorealOn
-    photoreal.show = photorealOn
+  let photorealOn = true
+
+  function setPhotoreal(on: boolean): void {
+    photorealOn = on
+    photoreal.show = on
     // The photogrammetry already contains the ground and the buildings, so
-    // showing it over them would z-fight against two surfaces of its own.
-    viewer.scene.globe.show = !photorealOn
-    buildings.show = !photorealOn
+    // drawing them underneath it would z-fight against two surfaces of its own.
+    viewer.scene.globe.show = !on
+    buildings.show = !on
   }
+
+  function togglePhotoreal(): void {
+    setPhotoreal(!photorealOn)
+  }
+
+  setPhotoreal(true)
 
   const flight = new DroneFlight(route, profile)
   let fpv = true
@@ -160,7 +166,7 @@ async function main(): Promise<void> {
     } else if (key === 'b') {
       buildings.show = !buildings.show
     } else if (key === 'p') {
-      void togglePhotoreal()
+      togglePhotoreal()
     } else if (key === ',' || key === '.') {
       const points = flight.route.points
       let index = points.findIndex((p) => p.distance > flight.distanceTravelled)
@@ -203,7 +209,7 @@ async function main(): Promise<void> {
 
   /** True when every visible tile source has finished streaming. */
   function settled(): boolean {
-    if (photorealOn) return photoreal?.tilesLoaded === true
+    if (photorealOn) return photoreal.tilesLoaded
     return viewer.scene.globe.tilesLoaded && (!buildings.show || buildings.tilesLoaded)
   }
 
@@ -216,6 +222,7 @@ async function main(): Promise<void> {
       flight,
       buildings,
       togglePhotoreal,
+      setPhotoreal,
       settled,
       setFpv(on: boolean) {
         fpv = on
