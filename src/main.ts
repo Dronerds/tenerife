@@ -1,8 +1,9 @@
 /**
- * Entry point. Parks the camera over Teide on Cesium World Terrain.
+ * Entry point. Parks the camera over Teide on Cesium World Terrain and resolves
+ * the demo route's ground profile.
  *
- * The flight, the route and the 3D Tiles layers land in later commits; this is
- * the viewer they all hang off.
+ * The flight and the 3D Tiles layers land in later commits; this is the viewer
+ * they hang off.
  */
 
 import {
@@ -13,6 +14,9 @@ import {
   createWorldTerrainAsync,
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
+
+import { FlightRoute, ROUTE } from './drone/route.ts'
+import { sampleRouteProfile, sampleWaypointGround } from './drone/terrain-profile.ts'
 
 const hud = document.getElementById('hud') as HTMLDivElement
 
@@ -53,7 +57,25 @@ async function main(): Promise<void> {
     orientation: { heading: 0, pitch: CesiumMath.toRadians(-60), roll: 0 },
   })
 
-  hud.textContent = 'Teide — Cesium World Terrain'
+  // The ground under the route, resolved before anything flies it. Two passes:
+  // the waypoints first, because their `agl` offsets decide where the spline
+  // goes, then the spline itself at 25 m spacing.
+  hud.textContent = 'sampling terrain…'
+  const started = performance.now()
+  const route = new FlightRoute(await sampleWaypointGround(terrainProvider, ROUTE))
+  const profile = await sampleRouteProfile(terrainProvider, route)
+  const sampleMs = performance.now() - started
+
+  console.info(
+    `route: ${(route.length / 1000).toFixed(2)} km, ` +
+      `ground sampled in ${(sampleMs / 1000).toFixed(1)} s`,
+  )
+
+  Object.assign(window, { tenerife: { viewer, route, profile } })
+  hud.textContent =
+    `route     ${(route.length / 1000).toFixed(1)} km\n` +
+    `sampled   ${(sampleMs / 1000).toFixed(1)} s\n` +
+    `summit    ${profile.groundAt(route.points[15]!.distance).toFixed(0)} m at ${route.points[15]!.name}`
 }
 
 main().catch((error: unknown) => {
