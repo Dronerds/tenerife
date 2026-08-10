@@ -11,16 +11,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "capture": "node tools/capture.mjs",
-    "verify:noise": "node tools/verify-noise-parity.mjs",
-    "data": "tools/.venv/bin/python tools/prepare_heights.py; tools/.venv/bin/python tools/prepare_landcover.py; tools/.venv/bin/python tools/prepare_osm.py; tools/.venv/bin/python tools/prepare_imagery.py"
-  },
-  "dependencies": {
-    "three": "^0.180.0"
+    "capture": "node tools/capture.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
-    "@types/three": "^0.180.0",
     "puppeteer-core": "^25.4.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
