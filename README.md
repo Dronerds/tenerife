@@ -1,10 +1,10 @@
 # tenerife — the Cesium branch
 
-The same demo flight over Tenerife, rebuilt on CesiumJS instead of three.js.
+Tenerife on CesiumJS instead of three.js.
 
 This branch is **not meant to be merged**. It exists to be run beside `main` and
-compared: same island, same 26 waypoints, same six capture viewpoints, a
-completely different answer to where the world comes from.
+compared: same island, same six capture viewpoints, a completely different
+answer to where the world comes from.
 
 | | `main` | `cesium` |
 | --- | --- | --- |
@@ -65,28 +65,21 @@ appears in the credit container, which is why that container is not disabled.
 
 | key | |
 | --- | --- |
-| `V` | FPV flight / free orbit |
-| `space` | pause |
+| `V` | orbit / free camera |
+| `space` | pause the orbit |
 | `[` `]` | slower / faster |
-| `,` `.` | previous / next waypoint |
 | `B` | toggle buildings |
 | `P` | photorealistic tiles / terrain + OSM buildings |
 
-## The demo route
+## The view
 
-Punta Brava → Puerto de la Cruz → La Orotava → up the valley to the Las Cañadas
-plateau → east to the Teide Observatory at Izaña → Pico del Teide → a circuit of
-the cone → back down the north slope to Puerto de la Cruz. 26 waypoints,
-cruising at ~100 m AGL.
+A slow orbit around Punta Brava. The camera starts due north of it, out over the
+water, so the opening shot looks south — inland along the coast at Puerto de la
+Cruz with Teide behind — and then circles at 2°/s, 900 m out and 320 m up.
 
-It climbs from sea level to 3,715 m and so crosses every one of Tenerife's
-vegetation bands in order — coastal euphorbia scrub, the cultivated terraces of
-the Orotava valley, laurisilva on the wet north slope, Canary pine, retama, bare
-lava — and back down.
-
-The waypoints are carried over from `main` byte for byte. On Cesium World
-Terrain the route measures 67.9 km and Teide resolves to 3,728 m against a true
-3,715 m.
+The 26-waypoint route flight the three.js version flies is not carried over
+here; `space` pauses the orbit, `[` and `]` change its speed, and `V` hands the
+camera to Cesium's own controls.
 
 ## What Cesium gave, and what it took
 
@@ -101,57 +94,28 @@ CPU/GPU parity contract, the biome-aware ground materials, and the altitudinal
 vegetation scatter are gone, because Cesium offers no vertex-displacement hook
 on its globe — you can override the globe's *material*, but not push its terrain
 around. So does the *mar de nubes*: Cesium has no stratus-deck primitive, and
-`CloudCollection` is cumulus billboards, not an inversion layer. The waypoint
-still named "Above the cloud sea" is now just a high waypoint.
+`CloudCollection` is cumulus billboards, not an inversion layer.
 
 **A wash.** Cesium World Terrain is ~30 m, the same as FABDEM, so swapping
 terrain providers changes very little on its own. What changes the image is the
-photorealistic tiles. At this route's ~100 m cruise that is a fair trade; it
-would be a worse one at the 15 m this project originally targeted, where
+photorealistic tiles. At the orbit's ~320 m that is a fair trade; it would be a
+worse one down at the 15 m this project originally targeted, where
 photogrammetry looks melted.
-
-## Two things worth knowing before editing
-
-**The spline is a hand-port of three.js's, not Cesium's.** Cesium ships
-`CatmullRomSpline`, and feeding it centripetal knot times looks equivalent. It
-is not: Cesium builds each cubic on the interval between knots, so the spacing
-changes the curve's *shape*, while three.js uses the spacing only to estimate
-tangents and then rescales them onto a unit interval. The Cesium version wandered
-up to 167 m horizontally and 177 m vertically from the three.js path — different
-valleys at the tight turns. With the port the two agree to 6.7 m over 68 km, and
-that residual is UTM scale distortion in `main`'s frame, not the curve. See
-[`src/drone/spline.ts`](src/drone/spline.ts).
-
-**Ground is sampled once, not per frame.** Cesium's height query is async and
-returns nothing for tiles that are not loaded, so a per-frame query fails exactly
-where the drone has just flown somewhere new. Instead the terrain under the route
-is resolved at startup — the 26 waypoints, then the spline at 25 m spacing, about
-2,700 samples in ~1 s — and baked into a profile indexed by distance travelled.
-The clearance clamp is then a synchronous lookup. See
-[`src/drone/terrain-profile.ts`](src/drone/terrain-profile.ts).
-
-Note that this samples the *globe* terrain, not the photorealistic tileset drawn
-over it, so the visible surface can stand above the terrain the clearance was
-measured against. Measured along the whole route with `scene.clampToHeight`, the
-worst case is **24.4 m of clearance** above the photogrammetry, at the Pine
-forest climb — the same place the globe-terrain minimum falls. Nothing clips,
-but the margin is about 6 m tighter than the nominal 32 m, so lowering
-`MIN_CLEARANCE` would need re-measuring rather than reasoning.
 
 ## Layout
 
 ```
 src/geo/          local ENU frame over the island
-src/drone/        the demo route, the centripetal spline, the terrain profile, the FPV camera
+src/camera/       the orbit camera
 tools/            Cesium asset staging, headless capture
-test/             frame and route contract tests
+test/             frame contract tests
 ```
 
 ## Verification
 
 ```bash
 npm run typecheck
-npm test                # ENU round-trip, axis orientation, route length and clamps
+npm test                # ENU round-trip, axis orientation
 npm run dev &
 npm run capture         # headless Chrome, real GPU, six fixed viewpoints
 ```

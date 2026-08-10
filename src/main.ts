@@ -1,14 +1,13 @@
 /**
- * Entry point. Starts in FPV mode flying the demo route.
+ * Entry point. Orbits Punta Brava, looking inland along the coast.
  *
  * Controls
- *   V             toggle FPV flight / free orbit
- *   space         pause the flight
+ *   V             toggle orbit / free camera
+ *   space         pause the orbit
  *   [ / ]         slower / faster
- *   , / .         previous / next waypoint
  *   B             toggle buildings
  *   P             photorealistic tiles / terrain + OSM buildings
- *   drag/scroll   orbit and zoom, in free mode
+ *   drag/scroll   pan and zoom, in free mode
  */
 
 import {
@@ -27,9 +26,7 @@ import {
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
-import { DroneFlight } from './drone/flight.ts'
-import { FlightRoute, ROUTE } from './drone/route.ts'
-import { sampleRouteProfile, sampleWaypointGround } from './drone/terrain-profile.ts'
+import { OrbitCamera } from './camera/orbit.ts'
 
 const hud = document.getElementById('hud') as HTMLDivElement
 
@@ -42,6 +39,21 @@ const hud = document.getElementById('hud') as HTMLDivElement
  * lever on why the two versions look different side by side.
  */
 const FOV = CesiumMath.toRadians(104.5)
+
+/**
+ * Punta Brava, the old route's first waypoint.
+ *
+ * The camera starts due north of it — out over the water — so the opening view
+ * looks south, inland, back along the coast. It then circles.
+ */
+const ORBIT = {
+  lon: -16.5678,
+  lat: 28.4183,
+  targetHeight: 40,
+  radius: 900,
+  height: 320,
+  startBearing: 0,
+}
 
 async function main(): Promise<void> {
   const token = import.meta.env['VITE_CESIUM_ION_TOKEN'] as string | undefined
@@ -90,18 +102,6 @@ async function main(): Promise<void> {
   // alongside a horizon-distance far plane.
   frustum.near = 0.5
 
-  // The ground under the route, resolved before anything flies it. Two passes:
-  // the waypoints first, because their `agl` offsets decide where the spline
-  // goes, then the spline itself at 25 m spacing.
-  hud.textContent = 'sampling terrain…'
-  const started = performance.now()
-  const route = new FlightRoute(await sampleWaypointGround(terrainProvider, ROUTE))
-  const profile = await sampleRouteProfile(terrainProvider, route)
-  console.info(
-    `route: ${(route.length / 1000).toFixed(2)} km, ` +
-      `ground sampled in ${((performance.now() - started) / 1000).toFixed(1)} s`,
-  )
-
   // Replaces the three.js version's OSM layer wholesale: 636 lines of extrusion
   // plus a 48 MB osm.json built by a Python script, for one line and no local
   // data. Same source data, same abstraction — untextured prisms from OSM
@@ -145,8 +145,8 @@ async function main(): Promise<void> {
 
   setPhotoreal(true)
 
-  const flight = new DroneFlight(route, profile)
-  let fpv = true
+  const orbit = new OrbitCamera(ORBIT)
+  let orbiting = true
   // Cesium's screen-space controller is the free-orbit camera; it has to be off
   // while the flight owns the camera or the two fight over it every frame.
   viewer.scene.screenSpaceCameraController.enableInputs = false
@@ -154,24 +154,19 @@ async function main(): Promise<void> {
   window.addEventListener('keydown', (event) => {
     const key = event.key.toLowerCase()
     if (key === 'v') {
-      fpv = !fpv
-      viewer.scene.screenSpaceCameraController.enableInputs = !fpv
+      orbiting = !orbiting
+      viewer.scene.screenSpaceCameraController.enableInputs = !orbiting
     } else if (event.key === ' ') {
-      flight.paused = !flight.paused
+      orbit.paused = !orbit.paused
       event.preventDefault()
     } else if (key === '[') {
-      flight.speed = Math.max(5, flight.speed - 10)
+      orbit.speed = Math.max(0.25, orbit.speed - 0.5)
     } else if (key === ']') {
-      flight.speed = Math.min(300, flight.speed + 10)
+      orbit.speed = Math.min(20, orbit.speed + 0.5)
     } else if (key === 'b') {
       buildings.show = !buildings.show
     } else if (key === 'p') {
       togglePhotoreal()
-    } else if (key === ',' || key === '.') {
-      const points = flight.route.points
-      let index = points.findIndex((p) => p.distance > flight.distanceTravelled)
-      if (index < 0) index = points.length
-      flight.seekToWaypoint(key === '.' ? index : index - 2)
     }
   })
 
@@ -187,22 +182,21 @@ async function main(): Promise<void> {
     // delta, which would teleport the drone hundreds of metres down the route.
     const dt = Math.min(frameMs / 1000, 0.1)
 
-    const state = fpv ? flight.update(dt, camera) : null
+    const state = orbiting ? orbit.update(dt, camera) : null
 
     const lines = [
-      `${fps.toFixed(0)} fps    ${fpv ? 'FPV' : 'free'}${state?.paused ? '  [PAUSED]' : ''}`,
+      `${fps.toFixed(0)} fps    ${orbiting ? 'orbit' : 'free'}${state?.paused ? '  [PAUSED]' : ''}`,
     ]
     if (state) {
       lines.push(
-        `altitude  ${state.altitude.toFixed(0)} m   agl ${state.agl.toFixed(0)} m`,
-        `waypoint  ${state.waypoint}`,
-        `route     ${(state.progress * 100).toFixed(1)}%   ${state.speed.toFixed(0)} m/s`,
+        `bearing   ${state.bearing.toFixed(0)}°   ${orbit.speed.toFixed(2)}°/s`,
+        `altitude  ${orbit.altitude.toFixed(0)} m`,
       )
     }
     lines.push(
       `layer     ${photorealOn ? 'google photoreal' : 'terrain + osm buildings'}`,
       `tiles     ${settled() ? 'loaded' : 'streaming'}`,
-      'V fpv  space  [ ] speed  , . wp  B built  P photoreal',
+      'V free  space  [ ] speed  B built  P photoreal',
     )
     hud.textContent = lines.join('\n')
   })
@@ -217,23 +211,14 @@ async function main(): Promise<void> {
   Object.assign(window, {
     tenerife: {
       viewer,
-      route,
-      profile,
-      flight,
+      orbit,
       buildings,
       togglePhotoreal,
       setPhotoreal,
       settled,
       setFpv(on: boolean) {
-        fpv = on
+        orbiting = on
         viewer.scene.screenSpaceCameraController.enableInputs = !on
-      },
-      /** Jump the flight to a fraction of the route, 0..1. */
-      seekTo(fraction: number) {
-        flight.seekTo(fraction)
-      },
-      seekToWaypoint(index: number) {
-        flight.seekToWaypoint(index)
       },
       /**
        * Place the free camera at a geographic position, `agl` metres up.
@@ -245,7 +230,7 @@ async function main(): Promise<void> {
         from: { lon: number; lat: number; agl: number },
         at: { lon: number; lat: number; agl?: number },
       ) {
-        fpv = false
+        orbiting = false
         viewer.scene.screenSpaceCameraController.enableInputs = true
         const [a, b] = await sampleTerrainMostDetailed(terrainProvider, [
           Cartographic.fromDegrees(from.lon, from.lat),
