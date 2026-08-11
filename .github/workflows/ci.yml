@@ -78,7 +78,8 @@ jobs:
       # which the build copies into dist.
       - run: npm ci
 
-      # No VITE_CESIUM_ION_TOKEN. It is only read at runtime, so the build
-      # succeeds without one, and a token baked into a public bundle bills per
-      # tile request.
+      # No VITE_CESIUM_ION_TOKEN here. Vite inlines VITE_* variables at build
+      # time, so this produces a bundle that cannot reach ion — fine for CI,
+      # which is only proving the thing compiles. release.yml supplies the token
+      # for the build it actually deploys.
       - run: npm run build

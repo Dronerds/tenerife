@@ -82,9 +82,10 @@ jobs:
       # without Cesium's workers and never renders.
       - run: npm ci
 
-      # No VITE_CESIUM_ION_TOKEN. It is only read at runtime, so the build
-      # succeeds without one, and a token baked into a published bundle bills
-      # per tile request. Whoever deploys the archive supplies their own.
+      # No VITE_CESIUM_ION_TOKEN in the downloadable archive. Vite inlines
+      # VITE_* at build time, so a token here would ship inside a public tarball
+      # with no way to rotate it out. Whoever unpacks this rebuilds with their
+      # own; the deploy job below builds separately with ours.
       - run: npm run build
 
       - name: Package dist
@@ -105,6 +106,59 @@ jobs:
             dronerds-tenerife-v${{ needs.create-release.outputs.version }}-dist.tar.gz
             dronerds-tenerife-v${{ needs.create-release.outputs.version }}-dist.tar.gz.sha256
           if-no-files-found: error
+
+  deploy:
+    name: Deploy
+    needs: create-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # Plain `npm ci`, never --ignore-scripts: the postinstall hook stages
+      # Cesium's runtime assets into the gitignored public/cesium, and without
+      # them the deployed site never renders.
+      - run: npm ci
+
+      # A second build rather than the release tarball: that one is deliberately
+      # tokenless for public download, and this one needs the token inlined.
+      # The token is readable by anyone who loads the site — that is inherent to
+      # a browser app talking to ion, and the mitigation is scoping it to this
+      # domain in the ion dashboard, not hiding it.
+      - run: npm run build
+        env:
+          VITE_CESIUM_ION_TOKEN: ${{ secrets.VITE_CESIUM_ION_TOKEN }}
+
+      # Fail here rather than silently publishing a site that errors on load for
+      # every visitor: an unset or empty secret is invisible until you open it.
+      - name: Verify the token made it into the bundle
+        env:
+          TOKEN: ${{ secrets.VITE_CESIUM_ION_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TOKEN}" ]; then
+            echo "VITE_CESIUM_ION_TOKEN secret is empty or unset." >&2
+            exit 1
+          fi
+          if ! grep -qrF "${TOKEN}" dist/assets; then
+            echo "Token is not present in dist/assets — the build did not inline it." >&2
+            exit 1
+          fi
+
+      # The site to deploy to is named in firebase.json rather than here, so the
+      # mapping lives in git. projectId must match the Firebase project.
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: dronerds
+          channelId: live
 
   upload:
     name: Upload
