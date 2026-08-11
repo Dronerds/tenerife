@@ -17,6 +17,24 @@
       canvas {
         display: block;
       }
+      #loading {
+        position: fixed;
+        inset: 0;
+        /* Above the HUD too — half-filled readouts undercut a loading screen. */
+        z-index: 10;
+        display: grid;
+        place-items: center;
+        background: #0b0e13;
+        color: #cfe3ff;
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        /* Faded out rather than removed, so the handover is not a hard cut. */
+        transition: opacity 400ms ease;
+      }
+      #loading[hidden] {
+        display: grid;
+        opacity: 0;
+        pointer-events: none;
+      }
       #hud {
         position: fixed;
         top: 8px;
@@ -34,6 +52,7 @@
   </head>
   <body>
     <div id="cesiumContainer"></div>
+    <div id="loading">loading…</div>
     <div id="hud">booting…</div>
     <script type="module" src="/src/main.ts"></script>
   </body>

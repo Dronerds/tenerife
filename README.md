@@ -75,6 +75,11 @@ seafront terraces. From there the camera is yours: it is Cesium's own screen-spa
 left-drag pans, scroll or right-drag zooms, and ctrl-drag (or middle-drag)
 rotates and tilts.
 
+A loading screen holds until the tiles are in. Photogrammetry streams
+coarsest-first, and its root tiles are enormous smeared blobs that read as a
+broken mesh for the several seconds they take to refine — the overlay covers
+that rather than showing it.
+
 Nothing moves the camera on its own. The 26-waypoint route flight the three.js
 version flies is not carried over here.
 
