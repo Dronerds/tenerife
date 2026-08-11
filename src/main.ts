@@ -28,6 +28,7 @@ import 'cesium/Build/Cesium/Widgets/widgets.css'
 
 
 const hud = document.getElementById('hud') as HTMLDivElement
+const loading = document.getElementById('loading') as HTMLDivElement
 
 /**
  * Horizontal field of view.
@@ -99,6 +100,18 @@ async function main(): Promise<void> {
   // alongside a horizon-distance far plane.
   frustum.near = 0.5
 
+  // Point the camera before anything is awaited. Otherwise it sits at Cesium's
+  // default whole-globe home view for as long as the tilesets take to create,
+  // streaming world imagery you never asked for, and then snaps to Tenerife.
+  camera.setView({
+    destination: Cartesian3.fromDegrees(START.lon, START.lat, START.height),
+    orientation: {
+      heading: CesiumMath.toRadians(START.heading),
+      pitch: CesiumMath.toRadians(START.pitch),
+      roll: 0,
+    },
+  })
+
   // Replaces the three.js version's OSM layer wholesale: 636 lines of extrusion
   // plus a 48 MB osm.json built by a Python script, for one line and no local
   // data. Same source data, same abstraction — untextured prisms from OSM
@@ -149,15 +162,6 @@ async function main(): Promise<void> {
   // 0 with it off or with the globe showing.
   viewer.scene.screenSpaceCameraController.enableCollisionDetection = false
 
-  camera.setView({
-    destination: Cartesian3.fromDegrees(START.lon, START.lat, START.height),
-    orientation: {
-      heading: CesiumMath.toRadians(START.heading),
-      pitch: CesiumMath.toRadians(START.pitch),
-      roll: 0,
-    },
-  })
-
   window.addEventListener('keydown', (event) => {
     const key = event.key.toLowerCase()
     if (key === 'b') {
@@ -169,12 +173,23 @@ async function main(): Promise<void> {
 
   let fps = 0
   let last = performance.now()
+  let settledFrames = 0
 
   viewer.scene.preUpdate.addEventListener(() => {
     const now = performance.now()
     const frameMs = Math.max(now - last, 0.001)
     last = now
     fps += (1000 / frameMs - fps) * 0.08
+
+    // Hold the loading screen until the tiles are in. Photogrammetry arrives
+    // coarsest-first, and its root tiles are enormous smeared blobs that read as
+    // a broken mesh for the seconds they take to refine — this covers that
+    // entirely rather than showing it. Two consecutive settled frames, because
+    // tilesLoaded flickers true between request batches.
+    if (!loading.hidden) {
+      settledFrames = settled() ? settledFrames + 1 : 0
+      if (settledFrames >= 2) loading.hidden = true
+    }
 
     const position = Cartographic.fromCartesian(camera.positionWC)
     const lon = CesiumMath.toDegrees(position.longitude)
