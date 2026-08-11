@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: 24
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      tag: ${{ steps.get_tag.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Get tag
+        id: get_tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release (generate notes, mark latest)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Through env rather than interpolated into the script below: these come from the
+          # pushed git tag, and interpolation substitutes them into bash before the shell ever
+          # treats them as data.
+          TAG: ${{ steps.get_tag.outputs.tag }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES_FILE="${RUNNER_TEMP}/release-notes-${TAG}.md"
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f tag_name="$TAG" \
+            -f target_commitish="${GITHUB_SHA}" \
+            --jq .body > "$NOTES_FILE"
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "Release ${VERSION}" \
+              --notes-file "$NOTES_FILE" \
+              --repo "$GITHUB_REPOSITORY" \
+              --latest
+          else
+            gh release create "$TAG" \
+              --title "Release ${VERSION}" \
+              --notes-file "$NOTES_FILE" \
+              --repo "$GITHUB_REPOSITORY" \
+              --latest
+          fi
+
+  build:
+    name: Build
+    needs: create-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # Plain `npm ci`, never --ignore-scripts: the postinstall hook stages
+      # Cesium's runtime assets into public/cesium, which is gitignored and
+      # which the build copies into dist. Without it the release bundle ships
+      # without Cesium's workers and never renders.
+      - run: npm ci
+
+      # No VITE_CESIUM_ION_TOKEN. It is only read at runtime, so the build
+      # succeeds without one, and a token baked into a published bundle bills
+      # per tile request. Whoever deploys the archive supplies their own.
+      - run: npm run build
+
+      - name: Package dist
+        env:
+          VERSION: ${{ needs.create-release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE="dronerds-tenerife-v${VERSION}-dist.tar.gz"
+          tar czf "${ARCHIVE}" dist
+          sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: |
+            dronerds-tenerife-v${{ needs.create-release.outputs.version }}-dist.tar.gz
+            dronerds-tenerife-v${{ needs.create-release.outputs.version }}-dist.tar.gz.sha256
+          if-no-files-found: error
+
+  upload:
+    name: Upload
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: dist
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(./dist/*)
+          if (( ${#files[@]} == 0 )); then
+            echo "No release assets found; skipping upload."
+            exit 0
+          fi
+          gh release upload "$TAG" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
