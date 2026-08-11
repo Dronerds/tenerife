@@ -11,9 +11,7 @@ describe('local ENU frame', () => {
   it('round-trips geographic positions across the island', () => {
     for (const { lon, lat } of [TEIDE, SANTA_CRUZ]) {
       for (const height of [0, 3715]) {
-        const back = Cartographic.fromCartesian(
-          toCartesian(fromLonLatHeight(lon, lat, height)),
-        )
+        const back = Cartographic.fromCartesian(toCartesian(fromLonLatHeight(lon, lat, height)))
         // Measured as ground distance, because that is the unit the error means
         // anything in. Sub-metre rather than exact: the horizontal pair is read
         // off a tangent plane sitting up to ~31 m above the ellipsoid at the far
