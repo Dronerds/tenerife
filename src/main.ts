@@ -26,7 +26,6 @@ import {
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
-
 const hud = document.getElementById('hud') as HTMLDivElement
 const loading = document.getElementById('loading') as HTMLDivElement
 
@@ -240,11 +239,7 @@ async function main(): Promise<void> {
           Cartographic.fromDegrees(at.lon, at.lat),
         ])
         const eye = Cartesian3.fromRadians(a!.longitude, a!.latitude, a!.height + from.agl)
-        const target = Cartesian3.fromRadians(
-          b!.longitude,
-          b!.latitude,
-          b!.height + (at.agl ?? 0),
-        )
+        const target = Cartesian3.fromRadians(b!.longitude, b!.latitude, b!.height + (at.agl ?? 0))
         const direction = Cartesian3.normalize(
           Cartesian3.subtract(target, eye, new Cartesian3()),
           new Cartesian3(),
@@ -255,23 +250,19 @@ async function main(): Promise<void> {
         Cartesian3.normalize(
           Cartesian3.subtract(
             up,
-            Cartesian3.multiplyByScalar(
-              direction,
-              Cartesian3.dot(up, direction),
-              new Cartesian3(),
-            ),
+            Cartesian3.multiplyByScalar(direction, Cartesian3.dot(up, direction), new Cartesian3()),
             up,
           ),
           up,
         )
         // Collision detection off. Two reasons: it stops you zooming down to street
-  // level, which is the point of having photogrammetry; and with the globe
-  // hidden under the photorealistic tiles it pushes the camera upward on its
-  // own — measured at 170 m of unrequested climb in the first seconds, against
-  // 0 with it off or with the globe showing.
-  viewer.scene.screenSpaceCameraController.enableCollisionDetection = false
+        // level, which is the point of having photogrammetry; and with the globe
+        // hidden under the photorealistic tiles it pushes the camera upward on its
+        // own — measured at 170 m of unrequested climb in the first seconds, against
+        // 0 with it off or with the globe showing.
+        viewer.scene.screenSpaceCameraController.enableCollisionDetection = false
 
-  camera.setView({ destination: eye, orientation: { direction, up } })
+        camera.setView({ destination: eye, orientation: { direction, up } })
       },
       /** Resolves after the next rendered frame, so a screenshot is not mid-update. */
       nextFrame(): Promise<void> {

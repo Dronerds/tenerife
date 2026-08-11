@@ -6,17 +6,17 @@ This branch is **not meant to be merged**. It exists to be run beside `main` and
 compared: same island, same six capture viewpoints, a completely different
 answer to where the world comes from.
 
-| | `main` | `cesium` |
-| --- | --- | --- |
-| Renderer | three.js, hand-built | CesiumJS |
-| Terrain | FABDEM 30 m, resident, CDLOD quadtree | Cesium World Terrain, streamed |
-| Surface detail | procedural noise displacement | none — what the tiles give |
-| Ground colour | biome materials + Sentinel-2 composite | Google photogrammetry |
-| Buildings | OSM ways extruded locally, 48 MB osm.json | Google photogrammetry (OSM Buildings on `P`) |
-| Vegetation | instanced billboards by altitude band | none |
-| Sky | hand-written dome, haze, *mar de nubes* | Cesium atmosphere |
-| Local data | ~90 MB, four Python prep scripts | none |
-| Source | ~7,400 lines TS/GLSL + 1,160 Python | ~900 lines TS |
+|                | `main`                                    | `cesium`                                     |
+| -------------- | ----------------------------------------- | -------------------------------------------- |
+| Renderer       | three.js, hand-built                      | CesiumJS                                     |
+| Terrain        | FABDEM 30 m, resident, CDLOD quadtree     | Cesium World Terrain, streamed               |
+| Surface detail | procedural noise displacement             | none — what the tiles give                   |
+| Ground colour  | biome materials + Sentinel-2 composite    | Google photogrammetry                        |
+| Buildings      | OSM ways extruded locally, 48 MB osm.json | Google photogrammetry (OSM Buildings on `P`) |
+| Vegetation     | instanced billboards by altitude band     | none                                         |
+| Sky            | hand-written dome, haze, _mar de nubes_   | Cesium atmosphere                            |
+| Local data     | ~90 MB, four Python prep scripts          | none                                         |
+| Source         | ~7,400 lines TS/GLSL + 1,160 Python       | ~900 lines TS                                |
 
 ## Running both at once
 
@@ -63,9 +63,9 @@ appears in the credit container, which is why that container is not disabled.
 
 ## Controls
 
-| key | |
-| --- | --- |
-| `B` | toggle buildings |
+| key |                                                |
+| --- | ---------------------------------------------- |
+| `B` | toggle buildings                               |
 | `P` | photorealistic tiles / terrain + OSM buildings |
 
 ## The view
@@ -97,8 +97,8 @@ the same machine.
 **Took.** All of the procedural work. The noise-displaced surface and its
 CPU/GPU parity contract, the biome-aware ground materials, and the altitudinal
 vegetation scatter are gone, because Cesium offers no vertex-displacement hook
-on its globe — you can override the globe's *material*, but not push its terrain
-around. So does the *mar de nubes*: Cesium has no stratus-deck primitive, and
+on its globe — you can override the globe's _material_, but not push its terrain
+around. So does the _mar de nubes_: Cesium has no stratus-deck primitive, and
 `CloudCollection` is cumulus billboards, not an inversion layer.
 
 **A wash.** Cesium World Terrain is ~30 m, the same as FABDEM, so swapping
@@ -154,9 +154,9 @@ the four Python prep scripts with the `data` npm script that drove them.
 
 ## Data
 
-| Layer | Source | Licence |
-| --- | --- | --- |
-| Terrain | Cesium World Terrain via ion | ion terms |
-| Imagery | ion default imagery | ion terms |
-| Buildings | Cesium OSM Buildings (ion asset 96188) | ODbL |
-| Photorealistic tiles (default) | Google Photorealistic 3D Tiles | Google terms, **metered** |
+| Layer                          | Source                                 | Licence                   |
+| ------------------------------ | -------------------------------------- | ------------------------- |
+| Terrain                        | Cesium World Terrain via ion           | ion terms                 |
+| Imagery                        | ion default imagery                    | ion terms                 |
+| Buildings                      | Cesium OSM Buildings (ion asset 96188) | ODbL                      |
+| Photorealistic tiles (default) | Google Photorealistic 3D Tiles         | Google terms, **metered** |
