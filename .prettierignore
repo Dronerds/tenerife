@@ -1,0 +1,8 @@
+dist
+public
+captures
+tools/data
+tools/.venv
+package-lock.json
+CLAUDE.md
+LICENSE
