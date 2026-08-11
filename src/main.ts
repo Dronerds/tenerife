@@ -13,6 +13,7 @@
 import {
   Cartesian3,
   Cartographic,
+  type Cesium3DTileset,
   Ellipsoid,
   Ion,
   JulianDate,
@@ -25,6 +26,7 @@ import {
   sampleTerrainMostDetailed,
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
+import { resolveLayers } from './layers'
 
 const hud = document.getElementById('hud') as HTMLDivElement
 const loading = document.getElementById('loading') as HTMLDivElement
@@ -123,33 +125,42 @@ async function main(): Promise<void> {
   // prisms over a shaded DEM. This is the layer that actually changes what the
   // route looks like, so it is what the app opens on.
   //
-  // It is also the only metered thing here — Google bills per tile request
-  // through the ion quota — so unlike everything else, simply running the app
-  // now costs something. P falls back to the free stack (Cesium World Terrain
-  // plus OSM buildings), which is also the like-for-like comparison against the
-  // three.js version.
+  // It is also the only metered thing here. Billing is per session — one root
+  // tileset request covers up to three hours of tile requests — so a visit costs
+  // one unit regardless of how long it lasts. On the ion free tier that is 1,000
+  // sessions a month and no payment path: at the cap it stops serving, it does
+  // not bill. P falls back to the free stack (Cesium World Terrain plus OSM
+  // buildings), which is also the like-for-like comparison against the three.js
+  // version.
   hud.textContent = 'loading photorealistic tiles…'
-  // Google licence: these tiles may only be used with the Google geocoder. This
-  // app has no geocoder at all (the Viewer disables it), so the restriction
-  // holds trivially, and this flag asserts we know about it.
-  const photoreal = await createGooglePhotorealistic3DTileset({
-    onlyUsingWithGoogleGeocoder: true,
-  })
-  viewer.scene.primitives.add(photoreal)
+  // Undefined when the tiles cannot be had — quota exhausted, token revoked, ion
+  // unreachable. That must not take the page down with it: the free stack above
+  // has already loaded and is a complete, usable view on its own. Everything
+  // below here — camera, keys, the window handle — has to run either way.
+  let photoreal: Cesium3DTileset | undefined
+  try {
+    // Google licence: these tiles may only be used with the Google geocoder.
+    // This app has no geocoder at all (the Viewer disables it), so the
+    // restriction holds trivially, and this flag asserts we know about it.
+    photoreal = await createGooglePhotorealistic3DTileset({
+      onlyUsingWithGoogleGeocoder: true,
+    })
+    viewer.scene.primitives.add(photoreal)
+  } catch (error) {
+    console.error('photorealistic tiles unavailable — falling back to the free stack', error)
+  }
 
-  let photorealOn = true
+  let layers = resolveLayers(false, photoreal !== undefined)
 
   function setPhotoreal(on: boolean): void {
-    photorealOn = on
-    photoreal.show = on
-    // The photogrammetry already contains the ground and the buildings, so
-    // drawing them underneath it would z-fight against two surfaces of its own.
-    viewer.scene.globe.show = !on
-    buildings.show = !on
+    layers = resolveLayers(on, photoreal !== undefined)
+    if (photoreal) photoreal.show = layers.photoreal
+    viewer.scene.globe.show = layers.globe
+    buildings.show = layers.buildings
   }
 
   function togglePhotoreal(): void {
-    setPhotoreal(!photorealOn)
+    setPhotoreal(!layers.photoreal)
   }
 
   setPhotoreal(true)
@@ -203,7 +214,7 @@ async function main(): Promise<void> {
         `pitch ${CesiumMath.toDegrees(camera.pitch).toFixed(0)}°`,
     ]
     lines.push(
-      `layer     ${photorealOn ? 'google photoreal' : 'terrain + osm buildings'}`,
+      `layer     ${layers.label}`,
       `tiles     ${settled() ? 'loaded' : 'streaming'}`,
       'drag pan   scroll zoom   ctrl-drag rotate/tilt   B built  P photoreal',
     )
@@ -212,7 +223,7 @@ async function main(): Promise<void> {
 
   /** True when every visible tile source has finished streaming. */
   function settled(): boolean {
-    if (photorealOn) return photoreal.tilesLoaded
+    if (layers.photoreal && photoreal) return photoreal.tilesLoaded
     return viewer.scene.globe.tilesLoaded && (!buildings.show || buildings.tilesLoaded)
   }
 
